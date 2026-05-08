@@ -253,12 +253,13 @@
       });
     }
 
-    function linkifyRefsAfterEscape(escapedBody, maxId) {
+    function linkifyRefsAfterEscape(escapedBody, maxId, permUrlForId) {
       return escapedBody.replace(/&gt;&gt;(\d+)/g, (_, digits) => {
         const n = parseInt(digits, 10);
         const stale = n > maxId;
         const cls = stale ? 'ref-link ref-link--stale' : 'ref-link';
-        return `<a class="${cls}" href="#comment-${n}">&gt;&gt;${digits}</a>`;
+        const href = escAttr(permUrlForId(n));
+        return `<a class="${cls}" href="${href}">&gt;&gt;${digits}</a>`;
       });
     }
 
@@ -379,7 +380,7 @@
           ? `<a rel="tag" href="${escAttr(buildPosterHref(pid))}">${escHtml(pid)}</a>`
           : '—';
         const bodyRaw = String(c.message || '');
-        const bodyHtml = linkifyRefsAfterEscape(linkifyUrlsInEscaped(escHtml(bodyRaw)), maxId);
+        const bodyHtml = linkifyRefsAfterEscape(linkifyUrlsInEscaped(escHtml(bodyRaw)), maxId, permUrl);
         const replyTo = replyTargetIdsForList(c)
           .map((tid) => `<a class="u-in-reply-to" href="${escAttr(permUrl(tid))}"></a>`)
           .join('');
