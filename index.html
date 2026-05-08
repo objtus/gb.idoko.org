@@ -73,6 +73,7 @@
         <div id="loading">loading...</div>
         <div id="no-comments">まだコメントはありません。</div>
         <div id="comments-list"></div>
+        <nav id="comments-pagination" class="comments-pagination" aria-label="ページ送り" hidden></nav>
       </section>
     </main>
 
@@ -85,11 +86,13 @@
   </div>
 
   <script>
-    const API = 'https://gb.idoko.org/api/comments';
+    const API = '/api/comments';
     const MESSAGE_MAX = 1000;
     const MESSAGE_WARN_THRESHOLD = 900;
     let globalMaxId = 0;
     let posterFilter = '';
+    let listPage = 1;
+    let listLimit = null;
 
     function normalizePayload(raw) {
       if (Array.isArray(raw)) {
@@ -97,11 +100,24 @@
         return {
           comments: c,
           max_id: c.length ? Math.max(...c.map((x) => x.id)) : 0,
+          page: 1,
+          page_size: c.length,
+          total_count: c.length,
+          total_pages: 1,
+          has_prev: false,
+          has_next: false,
         };
       }
+      const comments = raw.comments || [];
       return {
-        comments: raw.comments || [],
+        comments,
         max_id: raw.max_id != null ? raw.max_id : 0,
+        page: raw.page != null ? raw.page : 1,
+        page_size: raw.page_size != null ? raw.page_size : 25,
+        total_count: raw.total_count != null ? raw.total_count : comments.length,
+        total_pages: raw.total_pages != null ? raw.total_pages : 1,
+        has_prev: !!raw.has_prev,
+        has_next: !!raw.has_next,
       };
     }
 
@@ -259,9 +275,19 @@
       return '遅い時間にもありがとうございます。';
     }
 
-    function readPosterFilter() {
-      const q = new URLSearchParams(window.location.search).get('poster');
-      posterFilter = q && q.trim() ? q.trim() : '';
+    function readQueryState() {
+      const sp = new URLSearchParams(window.location.search);
+      const p = parseInt(sp.get('page') || '1', 10);
+      listPage = Number.isInteger(p) && p >= 1 ? p : 1;
+      const limRaw = sp.get('limit');
+      if (limRaw != null && String(limRaw).trim() !== '') {
+        const lm = parseInt(limRaw, 10);
+        listLimit = Number.isInteger(lm) && lm >= 1 && lm <= 100 ? lm : null;
+      } else {
+        listLimit = null;
+      }
+      const qPoster = sp.get('poster');
+      posterFilter = qPoster && qPoster.trim() ? qPoster.trim() : '';
       const banner = document.getElementById('poster-filter-banner');
       if (!posterFilter) {
         banner.style.display = 'none';
@@ -272,8 +298,47 @@
       banner.innerHTML = `${escHtml(posterFilter)} の投稿のみ表示中。<a href="${escAttr(window.location.pathname)}">全件を表示</a>`;
     }
 
+    function buildListHref(page) {
+      const base = window.location.pathname || '/';
+      const p = new URLSearchParams();
+      if (posterFilter) p.set('poster', posterFilter);
+      if (listLimit != null) p.set('limit', String(listLimit));
+      if (page > 1) p.set('page', String(page));
+      const s = p.toString();
+      return s ? `${base}?${s}` : base;
+    }
+
+    function buildPosterHref(posterId) {
+      const base = window.location.pathname || '/';
+      const p = new URLSearchParams();
+      p.set('poster', posterId);
+      if (listLimit != null) p.set('limit', String(listLimit));
+      const s = p.toString();
+      return `${base}?${s}`;
+    }
+
+    function renderPagination(meta) {
+      const nav = document.getElementById('comments-pagination');
+      if (!nav) return;
+      if (meta.total_pages <= 1) {
+        nav.hidden = true;
+        nav.innerHTML = '';
+        return;
+      }
+      nav.hidden = false;
+      const prev = meta.has_prev
+        ? `<a rel="prev" class="pagination-link" href="${escAttr(buildListHref(meta.page - 1))}">前のページ</a>`
+        : '<span class="pagination-link pagination-link--disabled" aria-disabled="true">前のページ</span>';
+      const next = meta.has_next
+        ? `<a rel="next" class="pagination-link" href="${escAttr(buildListHref(meta.page + 1))}">次のページ</a>`
+        : '<span class="pagination-link pagination-link--disabled" aria-disabled="true">次のページ</span>';
+      nav.innerHTML = `<div class="pagination-row">${prev}<span class="pagination-meta">${meta.page} / ${meta.total_pages}</span>${next}</div>`;
+    }
+
     function renderList(comments, maxId) {
       const list = document.getElementById('comments-list');
+      const origin = window.location.origin;
+      const permUrl = (id) => `${origin}/guestbook/${String(id).padStart(3, '0')}`;
       let rows = comments;
       if (posterFilter) {
         rows = comments.filter((c) => String(c.poster_id || '') === posterFilter);
@@ -292,14 +357,14 @@
         const whenIso = isoDatetimeAttr(c.created_at);
         const pid = String(c.poster_id || '');
         const posterLink = pid
-          ? `<a rel="tag" href="?poster=${escAttr(encodeURIComponent(pid))}">${escHtml(pid)}</a>`
+          ? `<a rel="tag" href="${escAttr(buildPosterHref(pid))}">${escHtml(pid)}</a>`
           : '—';
         const bodyRaw = String(c.message || '');
         const bodyHtml = linkifyRefsAfterEscape(linkifyUrlsInEscaped(escHtml(bodyRaw)), maxId);
-        const replyTo = c.reply_to_id ? `<a class="u-in-reply-to" href="#comment-${c.reply_to_id}"></a>` : '';
+        const replyTo = c.reply_to_id ? `<a class="u-in-reply-to" href="${escAttr(permUrl(c.reply_to_id))}"></a>` : '';
         return `
 <article class="h-entry guestbook-entry" id="comment-${id}">
-  <a class="u-uid" href="#comment-${id}"></a>
+  <a class="u-uid" href="${escAttr(permUrl(id))}"></a>
   ${replyTo}
   <header>
     <div class="guestbook-head">
@@ -347,29 +412,34 @@
       const list = document.getElementById('comments-list');
       const noComments = document.getElementById('no-comments');
       try {
-        const res = await fetch(API);
+        readQueryState();
+        const params = new URLSearchParams();
+        params.set('page', String(listPage));
+        if (posterFilter) params.set('poster', posterFilter);
+        if (listLimit != null) params.set('limit', String(listLimit));
+        const res = await fetch(`${API}?${params}`);
         const raw = await res.json();
-        const { comments: data, max_id: mid } = normalizePayload(raw);
+        if (!res.ok) {
+          loading.textContent = raw.error || 'コメントの読み込みに失敗しました。';
+          renderPagination({ total_pages: 1, has_prev: false, has_next: false, page: 1 });
+          return;
+        }
+        const payload = normalizePayload(raw);
+        const { comments: data, max_id: mid } = payload;
         globalMaxId = mid || 0;
         loading.style.display = 'none';
-        readPosterFilter();
+        renderPagination(payload);
         if (!data.length) {
           noComments.style.display = 'block';
-          noComments.textContent = 'まだコメントはありません。';
+          noComments.textContent = posterFilter
+            ? 'この ID の投稿はまだありません。'
+            : 'まだコメントはありません。';
           list.innerHTML = '';
           return;
         }
         noComments.textContent = 'まだコメントはありません。';
         renderList(data, globalMaxId);
-        const filteredEmpty =
-          posterFilter && !data.some((c) => String(c.poster_id || '') === posterFilter);
-        if (filteredEmpty) {
-          noComments.style.display = 'block';
-          noComments.textContent = 'この ID の投稿はまだありません。';
-          list.innerHTML = '';
-        } else {
-          noComments.style.display = 'none';
-        }
+        noComments.style.display = 'none';
       } catch (e) {
         loading.textContent = 'コメントの読み込みに失敗しました。';
       }

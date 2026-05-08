@@ -40,7 +40,7 @@ export async function onRequestGet({ request, env }) {
       const titleSub = r.subject && String(r.subject).trim() ? String(r.subject).trim() : "(no subject)";
       const from = (r.name && String(r.name).trim()) ? String(r.name).trim() : "Anonymous";
       const title = `#${r.id} ${from}: ${titleSub}`;
-      const link = `${origin}/#${r.id}`;
+      const link = `${origin}/guestbook/${String(r.id).padStart(3, "0")}`;
       const desc = escXml(String(r.message || ""));
       const pub = rfc822Date(r.created_at);
       return `

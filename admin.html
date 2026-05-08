@@ -118,17 +118,34 @@
       elList.innerHTML = '<table><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
     }
 
+    async function fetchAllComments() {
+      const limit = 100;
+      const all = [];
+      let page = 1;
+      for (;;) {
+        const res = await fetch(`${API}?limit=${limit}&page=${page}`);
+        const raw = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return { error: raw.error || '一覧の取得に失敗しました', comments: [] };
+        }
+        const batch = raw.comments || [];
+        all.push(...batch);
+        if (!raw.has_next || batch.length === 0) break;
+        page += 1;
+        if (page > 500) break;
+      }
+      return { comments: all };
+    }
+
     document.getElementById('btn-load').addEventListener('click', async () => {
       setStatus('');
       persistKey();
       try {
-        const res = await fetch(API);
-        const raw = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setStatus(raw.error || '一覧の取得に失敗しました', 'err');
+        const { comments, error } = await fetchAllComments();
+        if (error) {
+          setStatus(error, 'err');
           return;
         }
-        const { comments } = normalizePayload(raw);
         renderRows(comments);
         setStatus('読み込み完了（' + String(comments.length) + ' 件）', 'ok');
       } catch (e) {

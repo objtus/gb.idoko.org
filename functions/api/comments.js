@@ -1,17 +1,12 @@
+import { corsJson } from "../lib/cors-json.js";
+import { enrichComments } from "../lib/guestbook-enrich.js";
+import { fetchCommentsPage, parseListQuery } from "../lib/guestbook-queries.js";
+
 const NAME_MAX = 50;
 const SUBJECT_MAX = 120;
 const MESSAGE_MAX = 1000;
 const RATE_LIMIT_SEC = 45;
 const POSTER_HASH_BYTES = 8;
-
-function corsJson(body, init = {}) {
-  const h = new Headers(init.headers);
-  h.set("Access-Control-Allow-Origin", "*");
-  return new Response(typeof body === "string" ? body : JSON.stringify(body), {
-    ...init,
-    headers: h,
-  });
-}
 
 async function verifyTurnstile(token, ip, secret) {
   const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
@@ -29,20 +24,6 @@ async function hashPosterId(ip, env) {
   const digest = await crypto.subtle.digest("SHA-256", data);
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
   return hex.slice(0, POSTER_HASH_BYTES * 2);
-}
-
-function parseAdminSet(env) {
-  const raw = env.ADMIN_NAMES || "";
-  return new Set(
-    raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
-}
-
-function isAdminName(displayName, adminSet) {
-  return adminSet.has((displayName || "").trim());
 }
 
 function parseBearerToken(request) {
@@ -80,44 +61,37 @@ async function touchRateLimit(db, ip) {
     .run();
 }
 
-export async function onRequestGet({ env }) {
-  let results;
+export async function onRequestGet({ request, env }) {
   try {
-    const q = await env.idoko_guestbook.prepare(
-      "SELECT id, name, subject, message, created_at, reply_to_id, poster_id FROM comments ORDER BY created_at DESC LIMIT 100"
-    ).all();
-    results = q.results;
+    const db = env.idoko_guestbook;
+    const url = new URL(request.url);
+    const { page: requestedPage, limit, posterFilter } = parseListQuery(url);
+    const { results, totalCount, page } = await fetchCommentsPage(db, requestedPage, limit, posterFilter);
+    const enriched = enrichComments(results, env);
+
+    let maxId = 0;
+    try {
+      const maxRow = await db.prepare("SELECT MAX(id) AS m FROM comments").first();
+      maxId = maxRow && maxRow.m != null ? Number(maxRow.m) : 0;
+    } catch {
+      maxId = enriched.length ? Math.max(...enriched.map((r) => r.id)) : 0;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    return corsJson({
+      comments: enriched,
+      max_id: maxId,
+      page,
+      page_size: limit,
+      total_count: totalCount,
+      total_pages: totalPages,
+      has_prev: page > 1,
+      has_next: page < totalPages,
+    });
   } catch (e) {
-    const q = await env.idoko_guestbook.prepare(
-      "SELECT id, name, message, created_at FROM comments ORDER BY created_at DESC LIMIT 100"
-    ).all();
-    results = (q.results || []).map((r) => ({
-      ...r,
-      subject: null,
-      reply_to_id: null,
-      poster_id: r.poster_id ?? `legacy-${r.id}`,
-    }));
+    console.error("comments_get", e);
+    return corsJson({ error: "Database error" }, { status: 500 });
   }
-
-  const adminSet = parseAdminSet(env);
-  const enriched = (results || []).map((r) => {
-    const displayName = (r.name && String(r.name).trim()) ? String(r.name).trim() : "Anonymous";
-    return {
-      ...r,
-      display_name: displayName,
-      is_admin: isAdminName(displayName, adminSet),
-    };
-  });
-
-  let maxId = 0;
-  try {
-    const maxRow = await env.idoko_guestbook.prepare("SELECT MAX(id) AS m FROM comments").first();
-    maxId = maxRow && maxRow.m != null ? Number(maxRow.m) : 0;
-  } catch {
-    maxId = enriched.length ? Math.max(...enriched.map((r) => r.id)) : 0;
-  }
-
-  return corsJson({ comments: enriched, max_id: maxId });
 }
 
 export async function onRequestPost({ request, env }) {

@@ -567,6 +567,75 @@ time.time-toggle:hover {
   opacity: 0.4;
 }
 
+.comments-pagination {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.pagination-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.pagination-meta {
+  color: var(--fg-faint);
+}
+
+.pagination-link.pagination-link--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.pagination-link:not(.pagination-link--disabled) {
+  text-decoration: none;
+  color: var(--fg-muted);
+}
+
+.pagination-link:not(.pagination-link--disabled):hover {
+  color: var(--bg);
+  background: var(--fg);
+}
+
+.guestbook-context-nav {
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.guestbook-context-block {
+  margin-top: 1.75rem;
+}
+
+.guestbook-context-block:first-of-type {
+  margin-top: 0.75rem;
+}
+
+.guestbook-context-h2 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono);
+}
+
+.guestbook-context-empty {
+  color: var(--fg-faint);
+  font-size: 0.8125rem;
+}
+
+.guestbook-replies .guestbook-entry {
+  margin-top: 1rem;
+}
+
+.guestbook-replies .guestbook-entry:first-child {
+  margin-top: 0;
+}
+
 #loading {
   font-family: var(--font-mono);
   color: var(--fg-faint);
