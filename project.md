@@ -90,6 +90,47 @@ npx wrangler d1 execute idoko-guestbook --remote --command "SELECT COUNT(*) AS n
 
 ※ `subject`、`reply_to_id`、`poster_id` は過去 migration で追加。`comment_reply_targets` は上記ファイル。
 
+#### D1 データのリセット（ローカル／リモート）
+
+**警告**: `--remote` は本番の **`idoko-guestbook`** に効く。実行前に本当にまっさらでよいか確認する（復元にはバックアップが別途必要）。
+
+削除の要点は次のとおり。
+
+1. **`comment_reply_targets` を先に削除**する（親子の番号だけを残す参照が消える）。
+2. **`comments` は `reply_to_id` で自己参照**しているため、環境によっては `DELETE FROM comments` の一括が **外部キーで失敗**することがある。その場合は、**だれにも「返信先」として指されていない行（リーフ）から順に削除**する。リポジトリでは **[migrations/dev_reset_d1_data.sql](d:\web\gb.idoko.org\migrations\dev_reset_d1_data.sql)** に、リーフ削除を繰り返したあと `gb_rate_limit` と **`sqlite_sequence`（comments の自動採番カウンター）**を消す手順をまとめてある。
+3. **`DELETE FROM comments` だけでは `AUTOINCREMENT` がリセットされない**。上記ファイル末尾の **`DELETE FROM sqlite_sequence WHERE name = 'comments';`** で、ローカルで「次の INSERT は `id` が 1 から」になりやすくする（その行だけ省けばカウンターはそのまま）。採番を残したまま行だけ消す用途では `sqlite_sequence` の行をコメントアウトするなどして調整する。
+
+ローカルで実行する例:
+
+```powershell
+cd D:\web\gb.idoko.org
+npx wrangler d1 execute idoko-guestbook --local --file=migrations/dev_reset_d1_data.sql
+```
+
+リモート（本番）で同じことをする場合は **`--remote`** にだけ差し替える。返信チェーンが **20 を超える深さ**なら、`dev_reset_d1_data.sql` 内の `DELETE FROM comments WHERE id NOT IN (...)` 行を同じ文言で増やす。
+
+単純に件数だけ確認するとき:
+
+```powershell
+npx wrangler d1 execute idoko-guestbook --local --command "SELECT (SELECT COUNT(*) FROM comments) AS comments, (SELECT COUNT(*) FROM comment_reply_targets) AS targets, (SELECT COUNT(*) FROM gb_rate_limit) AS rate_limit;"
+```
+
+#### ダミーデータで返信を試す（例）
+
+ダミーを入れるときは **`reply_to_id` が参照する親の `id` が実在する**ことが必要。**採番をリセットしていないと**、親が `id=1` ではなくなるため、`reply_to_id = 1` の INSERT は **`FOREIGN KEY` で失敗**する。親の実 ID は次で確認する。
+
+```powershell
+npx wrangler d1 execute idoko-guestbook --local --command "SELECT id, name, reply_to_id FROM comments ORDER BY id;"
+```
+
+**既存の `#3` への返信**（1 回の実行で `comment_reply_targets` も付与）:
+
+```powershell
+npx wrangler d1 execute idoko-guestbook --local --command "INSERT INTO comments (name, message, reply_to_id) VALUES ('ダミー', '#3 への返信', 3); INSERT OR IGNORE INTO comment_reply_targets (comment_id, target_id, position) SELECT last_insert_rowid(), 3, 0;"
+```
+
+本番／リモート D1 で同様に試すときは、`--remote` とし、親の **`id`** を実データに合わせて **`3` を置き換える**。
+
 ### Turnstile
 
 - **サイトキー**: `0x4AAAAAADIZD04CPzXtviYs`
@@ -115,7 +156,7 @@ npx wrangler d1 execute idoko-guestbook --remote --command "SELECT COUNT(*) AS n
 ```
 gb.idoko.org/
 ├── index.html                  ← ゲストブックUI（Cursor生成、リッチ版）
-├── migrations/                 ← D1 手動適用用 SQL（複数親など）
+├── migrations/                 ← D1 手動適用用 SQL（複数親・データリセット用など）
 ├── functions/
 │   ├── api/
 │   │   ├── comments.js         ← GET/POST API（Cursor生成）
