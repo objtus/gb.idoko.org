@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>guestbook · admin</title>
+  <!-- 編集したら functions/admin-markup.js を再生成すること（repo 直下で node と readFile/writeFile で JSON.stringify する運用でも可）。 -->
   <style>
     body { font-family: system-ui, sans-serif; margin: 1rem auto; max-width: 52rem; padding: 0 0.75rem; line-height: 1.4; }
     h1 { font-size: 1.15rem; }
@@ -102,17 +103,19 @@
       const rows = comments.map((c) => {
         const subj = c.subject != null && String(c.subject) !== '' ? escapeHtml(c.subject) : '—';
         const msg = escapeHtml(c.message).slice(0, 280) + (String(c.message).length > 280 ? '…' : '');
-        return `<tr data-id="${c.id}">
-          <td>${c.id}</td>
-          <td>${escapeHtml(c.created_at)}</td>
-          <td>${escapeHtml(c.display_name || c.name || '')}</td>
-          <td>${c.reply_to_id != null ? escapeHtml(String(c.reply_to_id)) : '—'}</td>
-          <td>${subj}</td>
-          <td class="msg">${msg}</td>
-          <td><button type="button" class="btn-del del">削除</button></td>
-        </tr>`;
+        return (
+          '<tr data-id="' + String(c.id) + '">' +
+          '<td>' + String(c.id) + '</td>' +
+          '<td>' + escapeHtml(c.created_at) + '</td>' +
+          '<td>' + escapeHtml(c.display_name || c.name || '') + '</td>' +
+          '<td>' + (c.reply_to_id != null ? escapeHtml(String(c.reply_to_id)) : '—') + '</td>' +
+          '<td>' + subj + '</td>' +
+          '<td class="msg">' + msg + '</td>' +
+          '<td><button type="button" class="btn-del del">削除</button></td>' +
+          '</tr>'
+        );
       }).join('');
-      elList.innerHTML = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+      elList.innerHTML = '<table><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
     }
 
     document.getElementById('btn-load').addEventListener('click', async () => {
@@ -127,7 +130,7 @@
         }
         const { comments } = normalizePayload(raw);
         renderRows(comments);
-        setStatus(`読み込み完了（${comments.length} 件）`, 'ok');
+        setStatus('読み込み完了（' + String(comments.length) + ' 件）', 'ok');
       } catch (e) {
         setStatus('一覧の取得に失敗しました', 'err');
       }
@@ -145,7 +148,7 @@
         setStatus('管理用キーを入力してください', 'err');
         return;
       }
-      if (!confirm(`id=${id} を削除しますか？`)) return;
+      if (!confirm('id=' + String(id) + ' を削除しますか？')) return;
 
       persistKey();
       setStatus('削除中…');
@@ -160,10 +163,10 @@
         });
         const raw = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setStatus(raw.error || '削除に失敗しました（' + res.status + '）', 'err');
+          setStatus(raw.error || '削除に失敗しました（' + String(res.status) + '）', 'err');
           return;
         }
-        setStatus(`id=${id} を削除しました`, 'ok');
+        setStatus('id=' + String(id) + ' を削除しました', 'ok');
         tr.remove();
       } catch (err) {
         setStatus('削除リクエストに失敗しました', 'err');
