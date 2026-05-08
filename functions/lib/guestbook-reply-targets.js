@@ -49,21 +49,53 @@ export function mergeExplicitAndParsedReplyTargets(explicitReplyId, messageTrim)
 }
 
 /**
- * DB 上にすべて存在することを確認する。欠けがあると null。
+ * mergedTargets の並び順を保ち、comments に実在する id だけ返す（FK に載せる用）。
  * @param {import("@cloudflare/workers-types").D1Database} db
  * @param {number[]} ids
- * @returns {Promise<boolean>}
+ * @returns {Promise<number[]>}
  */
-export async function allReplyTargetsExist(db, ids) {
-  if (!ids.length) return true;
+export async function filterExistingReplyTargetIdsInOrder(db, ids) {
+  if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
   const q = await db
     .prepare(`SELECT id FROM comments WHERE id IN (${placeholders})`)
     .bind(...ids)
     .all();
   const got = new Set((q.results || []).map((r) => Number(r.id)));
-  for (const id of ids) {
-    if (!got.has(id)) return false;
+  return ids.filter((id) => got.has(id));
+}
+
+/**
+ * DB に保存できた返信先（junction / reply_to_id）に、本文行頭の >>n を足す（重複は後勝ちで付け足さない）。
+ * @param {number[]} storedOrdered
+ * @param {string} [message]
+ * @returns {number[]}
+ */
+export function mergeStoredAndLineReplyTargets(storedOrdered, message) {
+  const base = Array.isArray(storedOrdered) ? storedOrdered : [];
+  const fromLines = parseLineLeadingReplyTargetIds(message || "");
+  const seen = new Set(base);
+  const out = [...base];
+  for (const n of fromLines) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
   }
-  return true;
+  return out;
+}
+
+/**
+ * 次の行に付く id が max(id)+1 のとき、存在しない番号への参照がそれだけなら、その投稿自身がその id になる循環参照になる。
+ * @param {number[]} mergedTargets
+ * @param {number} anticipatedNextId max(id)+1（空なら 1）
+ * @param {number[]} existingInOrder DB に存在するターゲット
+ */
+export function isPhantomOnlySelfCycle(mergedTargets, anticipatedNextId, existingInOrder) {
+  if (existingInOrder.length > 0) return false;
+  return (
+    mergedTargets.length === 1 &&
+    mergedTargets[0] === anticipatedNextId &&
+    Number.isInteger(anticipatedNextId) &&
+    anticipatedNextId > 0
+  );
 }

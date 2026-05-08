@@ -8,7 +8,8 @@ import {
 } from "../lib/guestbook-queries.js";
 import {
   MAX_REPLY_TARGETS,
-  allReplyTargetsExist,
+  filterExistingReplyTargetIdsInOrder,
+  isPhantomOnlySelfCycle,
   mergeExplicitAndParsedReplyTargets,
 } from "../lib/guestbook-reply-targets.js";
 
@@ -167,12 +168,24 @@ export async function onRequestPost({ request, env }) {
     );
   }
 
-  if (mergedTargets.length > 0) {
-    const targetsOk = await allReplyTargetsExist(env.idoko_guestbook, mergedTargets);
-    if (!targetsOk) {
-      return corsJson({ error: "Invalid reply target" }, { status: 400 });
-    }
+  let maxIdForReply = 0;
+  try {
+    const maxRow = await env.idoko_guestbook.prepare("SELECT MAX(id) AS m FROM comments").first();
+    maxIdForReply = maxRow && maxRow.m != null ? Number(maxRow.m) : 0;
+  } catch {
+    maxIdForReply = 0;
   }
+  const anticipatedNextId = maxIdForReply + 1;
+  const existingTargetsInOrder =
+    mergedTargets.length > 0
+      ? await filterExistingReplyTargetIdsInOrder(env.idoko_guestbook, mergedTargets)
+      : [];
+
+  if (isPhantomOnlySelfCycle(mergedTargets, anticipatedNextId, existingTargetsInOrder)) {
+    return corsJson({ error: "Invalid reply target" }, { status: 400 });
+  }
+
+  const primaryReply = existingTargetsInOrder.length ? existingTargetsInOrder[0] : null;
 
   const valid = await verifyTurnstile(turnstileToken, ip, env.TURNSTILE_SECRET);
   if (!valid) {
@@ -190,7 +203,6 @@ export async function onRequestPost({ request, env }) {
 
   const posterId = await hashPosterId(ip, env);
   const db = env.idoko_guestbook;
-  const primaryReply = mergedTargets.length > 0 ? mergedTargets[0] : null;
 
   try {
     await db
@@ -202,14 +214,14 @@ export async function onRequestPost({ request, env }) {
     const idRow = await db.prepare("SELECT last_insert_rowid() AS id").first();
     const newId = idRow && idRow.id != null ? Number(idRow.id) : NaN;
 
-    if (Number.isInteger(newId) && newId > 0 && mergedTargets.length > 0) {
+    if (Number.isInteger(newId) && newId > 0 && existingTargetsInOrder.length > 0) {
       try {
-        for (let pos = 0; pos < mergedTargets.length; pos++) {
+        for (let pos = 0; pos < existingTargetsInOrder.length; pos++) {
           await db
             .prepare(
               "INSERT INTO comment_reply_targets (comment_id, target_id, position) VALUES (?, ?, ?)"
             )
-            .bind(newId, mergedTargets[pos], pos)
+            .bind(newId, existingTargetsInOrder[pos], pos)
             .run();
         }
       } catch (je) {

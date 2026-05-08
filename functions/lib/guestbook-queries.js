@@ -1,5 +1,7 @@
 /** @typedef {import("@cloudflare/workers-types").D1Database} D1Database */
 
+import { mergeStoredAndLineReplyTargets } from "./guestbook-reply-targets.js";
+
 export const PAGE_LIMIT_DEFAULT = 25;
 export const PAGE_LIMIT_MAX = 100;
 
@@ -93,17 +95,19 @@ export async function fetchReplyTargetsBatch(db, commentIds) {
  */
 export function attachReplyTargetIds(rows, batchMap) {
   return rows.map((row) => {
+    /** @type {number[]} */
+    let ids = [];
     const fromJunction = batchMap.get(row.id);
     if (fromJunction && fromJunction.length > 0) {
-      return { ...row, reply_target_ids: [...fromJunction] };
-    }
-    if (row.reply_to_id != null && row.reply_to_id !== "") {
+      ids = [...fromJunction];
+    } else if (row.reply_to_id != null && row.reply_to_id !== "") {
       const rid = Number(row.reply_to_id);
       if (Number.isInteger(rid) && rid > 0) {
-        return { ...row, reply_target_ids: [rid] };
+        ids = [rid];
       }
     }
-    return { ...row, reply_target_ids: [] };
+    const msg = typeof row.message === "string" ? row.message : "";
+    return { ...row, reply_target_ids: mergeStoredAndLineReplyTargets(ids, msg) };
   });
 }
 
@@ -173,10 +177,14 @@ export async function fetchCommentChainRows(db, id) {
   if (!focus) return null;
 
   const parentIds = await fetchParentTargetIdsForComment(db, focus.id, focus.reply_to_id);
+  const parentIdsMerged = mergeStoredAndLineReplyTargets(
+    parentIds,
+    typeof focus.message === "string" ? focus.message : ""
+  );
   /** @type {number[]} */
   const parentIdList = [];
   const seenP = new Set();
-  for (const pid of parentIds) {
+  for (const pid of parentIdsMerged) {
     if (pid === id || seenP.has(pid)) continue;
     seenP.add(pid);
     parentIdList.push(pid);
