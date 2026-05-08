@@ -411,7 +411,7 @@ time.time-toggle:hover {
 }
 
 #form-status.err {
-  color: var(--fg);
+  color: #a20;
   font-weight: 600;
 }
 
@@ -512,6 +512,7 @@ time.time-toggle:hover {
   color: var(--fg);
   border-left: 2em solid var(--line-soft);
   margin-left: -2em;
+  padding: 5px 0;
 }
 
 .guestbook-body a.body-link {
