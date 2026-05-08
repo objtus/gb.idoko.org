@@ -14,11 +14,6 @@
   <div id="wrapper">
     <header id="header">
       <div id="header-flex">
-        <nav id="back" aria-label="戻るナビゲーション">
-          <a id="backicon" href="https://idoko.org/">
-            &lt;
-          </a>
-        </nav>
         <nav id="address" aria-label="パンくずナビゲーション">
           <ol class="breadcrumb">
             <li><a class="addressbar" href="https://idoko.org/">idoko.org</a></li>
@@ -43,17 +38,20 @@
             <input type="text" id="input-website" name="website" tabindex="-1" autocomplete="off">
           </div>
           <div class="form-row">
-            <label for="input-name">name（任意）</label>
-            <input type="text" id="input-name" maxlength="50" placeholder="空欄は Anonymous" autocomplete="off">
+            <label for="input-name">name</label>
+            <input type="text" id="input-name" maxlength="50" placeholder="Anonymous" autocomplete="off">
           </div>
           <div class="form-row">
-            <label for="input-subject">subject（任意）</label>
-            <input type="text" id="input-subject" maxlength="120" placeholder="空欄は (no subject)" autocomplete="off">
+            <label for="input-subject">subject</label>
+            <input type="text" id="input-subject" maxlength="120" placeholder="(no subject)" autocomplete="off">
           </div>
           <div class="form-row">
-            <label for="input-message">message（必須）</label>
-            <textarea id="input-message" maxlength="500" placeholder="本文..."></textarea>
-            <div class="char-count" id="char-count">0 / 500</div>
+            <label for="input-message">message</label>
+            <textarea id="input-message" maxlength="1000" placeholder="message..."></textarea>
+            <div class="form-row-meta" aria-label="現在時刻と文字数">
+              <time id="form-compose-time" class="form-compose-time time-toggle" role="button" tabindex="0" datetime=""></time>
+              <div class="char-count" id="char-count">0 chars / 0 bytes · max 1000 chars</div>
+            </div>
           </div>
         </div>
 
@@ -88,6 +86,8 @@
 
   <script>
     const API = 'https://gb.idoko.org/api/comments';
+    const MESSAGE_MAX = 1000;
+    const MESSAGE_WARN_THRESHOLD = 900;
     let globalMaxId = 0;
     let posterFilter = '';
 
@@ -117,17 +117,64 @@
       return c.subject && String(c.subject).trim() ? String(c.subject).trim() : '(no subject)';
     }
 
-    function formatTokyoHuman(iso) {
+    function formatLocalHuman(iso) {
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return String(iso);
       return d.toLocaleString('ja-JP', {
-        timeZone: 'Asia/Tokyo',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
       });
+    }
+
+    const relativeTimeFmt = new Intl.RelativeTimeFormat('ja', { numeric: 'auto' });
+
+    function formatRelativeJa(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      const diffSec = Math.round((d.getTime() - Date.now()) / 1000);
+      const past = diffSec < 0;
+      const s = Math.abs(diffSec);
+      if (s < 45) return 'たった今';
+      if (s < 3600) {
+        const m = Math.max(1, Math.round(s / 60));
+        return relativeTimeFmt.format(past ? -m : m, 'minute');
+      }
+      if (s < 86400) {
+        const h = Math.max(1, Math.round(s / 3600));
+        return relativeTimeFmt.format(past ? -h : h, 'hour');
+      }
+      if (s < 86400 * 7) {
+        const days = Math.max(1, Math.round(s / 86400));
+        return relativeTimeFmt.format(past ? -days : days, 'day');
+      }
+      if (s < 86400 * 30) {
+        const w = Math.max(1, Math.round(s / (86400 * 7)));
+        return relativeTimeFmt.format(past ? -w : w, 'week');
+      }
+      if (s < 86400 * 365) {
+        const mo = Math.max(1, Math.round(s / (86400 * 30)));
+        return relativeTimeFmt.format(past ? -mo : mo, 'month');
+      }
+      const y = Math.max(1, Math.round(s / (86400 * 365)));
+      return relativeTimeFmt.format(past ? -y : y, 'year');
+    }
+
+    function toggleTimeDisplay(timeEl) {
+      const iso = timeEl.getAttribute('datetime');
+      if (!iso) return;
+      if (timeEl.dataset.displayMode === 'relative') {
+        timeEl.dataset.displayMode = 'absolute';
+        timeEl.textContent = formatLocalHuman(iso);
+        timeEl.title = 'クリックで相対表示に切替';
+      } else {
+        timeEl.dataset.displayMode = 'relative';
+        timeEl.textContent = formatRelativeJa(iso);
+        timeEl.title = 'クリックで日時表示に戻す';
+      }
     }
 
     function isoDatetimeAttr(iso) {
@@ -136,18 +183,58 @@
       return d.toISOString();
     }
 
-    function unixSec(iso) {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return 0;
-      return Math.floor(d.getTime() / 1000);
-    }
-
     function utf8Bytes(s) {
       return new TextEncoder().encode(s).length;
     }
 
     function charCountUnicode(s) {
       return [...String(s)].length;
+    }
+
+    function syncFormCharCount() {
+      const el = document.getElementById('input-message');
+      const cc = document.getElementById('char-count');
+      if (!el || !cc) return;
+      const v = el.value;
+      const cu = charCountUnicode(v);
+      cc.textContent = `${cu} chars / ${utf8Bytes(v)} bytes · max ${MESSAGE_MAX} chars`;
+      cc.classList.toggle('warn', cu > MESSAGE_WARN_THRESHOLD);
+    }
+
+    function syncFormComposeTime() {
+      const el = document.getElementById('form-compose-time');
+      if (!el) return;
+      const now = new Date();
+      el.dateTime = now.toISOString();
+      if (el.dataset.displayMode === 'relative') {
+        el.textContent = formatRelativeJa(el.dateTime);
+        el.title = 'クリックで日時表示に戻す';
+      } else {
+        el.textContent = formatLocalHuman(el.dateTime);
+        el.title = 'クリックで相対表示に切替';
+      }
+    }
+
+    function linkifyUrlsInEscaped(escaped) {
+      const re = /https?:\/\/[^\s<]+/gi;
+      return escaped.replace(re, (rawMatch) => {
+        let u = rawMatch;
+        let suffix = '';
+        while (u.length && /[.,;:!?。、]+$/.test(u)) {
+          suffix = u.slice(-1) + suffix;
+          u = u.slice(0, -1);
+        }
+        const href = u.replace(/&amp;/g, '&');
+        let parsed;
+        try {
+          parsed = new URL(href);
+        } catch {
+          return rawMatch;
+        }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return rawMatch;
+        const safeHref = escAttr(href);
+        return `<a class="body-link" href="${safeHref}" rel="noopener noreferrer" target="_blank">${u}</a>${suffix}`;
+      });
     }
 
     function linkifyRefsAfterEscape(escapedBody, maxId) {
@@ -201,30 +288,37 @@
         const subjAttr = c.subject && String(c.subject).trim() ? String(c.subject).trim() : '(no subject)';
         const author = escHtml(c.display_name || ((c.name && String(c.name).trim()) ? c.name : 'Anonymous'));
         const star = c.is_admin ? ' ★' : '';
-        const whenHuman = formatTokyoHuman(c.created_at);
+        const whenHuman = formatLocalHuman(c.created_at);
         const whenIso = isoDatetimeAttr(c.created_at);
-        const ux = unixSec(c.created_at);
         const pid = String(c.poster_id || '');
         const posterLink = pid
           ? `<a rel="tag" href="?poster=${escAttr(encodeURIComponent(pid))}">${escHtml(pid)}</a>`
           : '—';
         const bodyRaw = String(c.message || '');
-        const bodyHtml = linkifyRefsAfterEscape(escHtml(bodyRaw), maxId);
+        const bodyHtml = linkifyRefsAfterEscape(linkifyUrlsInEscaped(escHtml(bodyRaw)), maxId);
         const replyTo = c.reply_to_id ? `<a class="u-in-reply-to" href="#comment-${c.reply_to_id}"></a>` : '';
         return `
 <article class="h-entry guestbook-entry" id="comment-${id}">
   <a class="u-uid" href="#comment-${id}"></a>
   ${replyTo}
   <header>
-    <div class="guestbook-head">#${String(id).padStart(3, '0')}
-From    : <span class="p-author">${author}</span>${escHtml(star)}
-Date    : <time class="dt-published" datetime="${escAttr(whenIso)}">${escHtml(whenHuman)}</time>  [<data value="${ux}">${ux}</data>]
-Subject : ${escHtml(subj)}</div>
+    <div class="guestbook-head">
+      <div class="guestbook-head-line">
+        <div class="guestbook-head-id">#${String(id).padStart(3, '0')}</div>
+        <div class="guestbook-stats">
+          <span class="guestbook-stats-meta">${charCountUnicode(bodyRaw)} chars / ${utf8Bytes(bodyRaw)} bytes</span>
+          <span class="guestbook-stats-id">ID: ${posterLink}</span>
+        </div>
+      </div>
+      <div class="guestbook-head-meta">
+        <span class="guestbook-meta-k">From :</span><span class="guestbook-meta-v"><span class="p-author">${author}</span>${escHtml(star)}</span>
+        <span class="guestbook-meta-k">Date :</span><span class="guestbook-meta-v"><time class="dt-published time-toggle" tabindex="0" role="button" title="クリックで相対表示に切替" datetime="${escAttr(whenIso)}">${escHtml(whenHuman)}</time></span>
+        <span class="guestbook-meta-k">Subject :</span><span class="guestbook-meta-v">${escHtml(subj)}</span>
+      </div>
+    </div>
     <data class="p-name" value="${escAttr(subjAttr)}"></data>
   </header>
   <div class="e-content guestbook-body">${bodyHtml}</div>
-  <div class="guestbook-stats">${charCountUnicode(bodyRaw)} chars / ${utf8Bytes(bodyRaw)} bytes<br>
-ID: ${posterLink}</div>
   <div class="reply-row">
     <button type="button" class="btn reply-btn" data-reply-id="${id}" data-subject="${escAttr(subjAttr)}" aria-label="返信">↩</button>
   </div>
@@ -243,10 +337,7 @@ ID: ${posterLink}</div>
           msg.value = msg.value.trim().length ? `${line}\n${msg.value}` : `${line}\n`;
           document.getElementById('post-form').scrollIntoView({ behavior: 'smooth' });
           msg.focus();
-          const len = msg.value.length;
-          const cc = document.getElementById('char-count');
-          cc.textContent = `${len} / 500`;
-          cc.classList.toggle('warn', len > 450);
+          syncFormCharCount();
         });
       });
     }
@@ -285,7 +376,6 @@ ID: ${posterLink}</div>
     }
 
     const msgInput = document.getElementById('input-message');
-    const charCount = document.getElementById('char-count');
     const previewPanel = document.getElementById('preview-panel');
     const fieldsPanel = document.getElementById('fields-panel');
     const previewBtn = document.getElementById('preview-btn');
@@ -308,11 +398,7 @@ ID: ${posterLink}</div>
       previewPanel.textContent = '';
     }
 
-    msgInput.addEventListener('input', () => {
-      const len = msgInput.value.length;
-      charCount.textContent = `${len} / 500`;
-      charCount.classList.toggle('warn', len > 450);
-    });
+    msgInput.addEventListener('input', syncFormCharCount);
 
     clearBtn.addEventListener('click', () => {
       document.getElementById('input-name').value = '';
@@ -320,8 +406,7 @@ ID: ${posterLink}</div>
       document.getElementById('input-website').value = '';
       document.getElementById('input-reply-to').value = '';
       msgInput.value = '';
-      charCount.textContent = '0 / 500';
-      charCount.classList.remove('warn');
+      syncFormCharCount();
       const st = document.getElementById('form-status');
       st.textContent = '';
       st.className = '';
@@ -408,7 +493,7 @@ ID: ${posterLink}</div>
           document.getElementById('input-website').value = '';
           document.getElementById('input-reply-to').value = '';
           msgInput.value = '';
-          charCount.textContent = '0 / 500';
+          syncFormCharCount();
           resetPreview();
           try { turnstile.reset(); } catch (e) {}
           await loadComments();
@@ -424,6 +509,30 @@ ID: ${posterLink}</div>
       } finally {
         btn.disabled = false;
       }
+    });
+
+    const commentsListEl = document.getElementById('comments-list');
+    commentsListEl.addEventListener('click', (e) => {
+      const t = e.target.closest('time.dt-published.time-toggle');
+      if (!t || !commentsListEl.contains(t)) return;
+      toggleTimeDisplay(t);
+    });
+
+    const formComposeTimeEl = document.getElementById('form-compose-time');
+    formComposeTimeEl.addEventListener('click', () => toggleTimeDisplay(formComposeTimeEl));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const t = e.target.closest('time.time-toggle');
+      if (!t) return;
+      e.preventDefault();
+      toggleTimeDisplay(t);
+    });
+
+    syncFormComposeTime();
+    setInterval(syncFormComposeTime, 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') syncFormComposeTime();
     });
 
     loadComments();

@@ -1,6 +1,6 @@
 const NAME_MAX = 50;
 const SUBJECT_MAX = 120;
-const MESSAGE_MAX = 500;
+const MESSAGE_MAX = 1000;
 const RATE_LIMIT_SEC = 45;
 const POSTER_HASH_BYTES = 8;
 
