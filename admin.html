@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>guestbook · admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1rem auto; max-width: 52rem; padding: 0 0.75rem; line-height: 1.4; }
+    h1 { font-size: 1.15rem; }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; }
+    input[type="password"] { width: min(28rem, 100%); box-sizing: border-box; padding: 0.35rem 0.5rem; }
+    .row { margin-top: 0.5rem; }
+    button { margin-top: 0.5rem; margin-right: 0.5rem; padding: 0.35rem 0.65rem; cursor: pointer; }
+    #status { margin-top: 0.75rem; min-height: 1.25rem; color: #333; }
+    #status.err { color: #a20; }
+    #status.ok { color: #060; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+    th, td { border: 1px solid #ccc; padding: 0.35rem 0.45rem; vertical-align: top; text-align: left; }
+    th { background: #f4f4f4; }
+    td.msg { max-width: 20rem; word-break: break-word; }
+    .del { color: #a20; }
+  </style>
+</head>
+
+<body>
+  <h1>guestbook · 管理（削除のみ）</h1>
+  <p>トップページからはリンクしていません。<code>ADMIN_DELETE_SECRET</code> を Cloudflare Pages の環境変数に設定してください。</p>
+
+  <label for="admin-key">管理用キー</label>
+  <input type="password" id="admin-key" autocomplete="off" spellcheck="false">
+
+  <div class="row">
+    <label>
+      <input type="checkbox" id="remember-tab"> このタブの間だけ入力を覚える（sessionStorage）
+    </label>
+  </div>
+
+  <div class="row">
+    <button type="button" id="btn-load">一覧を読み込む</button>
+  </div>
+
+  <div id="status" role="status"></div>
+
+  <div id="list-wrap"></div>
+
+  <script>
+    const API = '/api/comments';
+    const STORAGE_KEY = 'gb_admin_secret';
+
+    const elKey = document.getElementById('admin-key');
+    const elRemember = document.getElementById('remember-tab');
+    const elStatus = document.getElementById('status');
+    const elList = document.getElementById('list-wrap');
+
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        elKey.value = saved;
+        elRemember.checked = true;
+      }
+    } catch (e) {}
+
+    function persistKey() {
+      try {
+        if (elRemember.checked) sessionStorage.setItem(STORAGE_KEY, elKey.value);
+        else sessionStorage.removeItem(STORAGE_KEY);
+      } catch (e) {}
+    }
+
+    elRemember.addEventListener('change', persistKey);
+    elKey.addEventListener('input', () => {
+      if (elRemember.checked) persistKey();
+    });
+
+    function setStatus(text, cls) {
+      elStatus.textContent = text || '';
+      elStatus.className = cls || '';
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    function normalizePayload(raw) {
+      if (Array.isArray(raw)) {
+        const c = raw;
+        return { comments: c, max_id: c.length ? Math.max(...c.map((x) => x.id)) : 0 };
+      }
+      return { comments: raw.comments || [], max_id: raw.max_id || 0 };
+    }
+
+    function renderRows(comments) {
+      if (!comments.length) {
+        elList.innerHTML = '<p>コメントがありません。</p>';
+        return;
+      }
+      const head = '<tr><th>id</th><th>日時</th><th>name</th><th>reply</th><th>subject</th><th class="msg">message</th><th></th></tr>';
+      const rows = comments.map((c) => {
+        const subj = c.subject != null && String(c.subject) !== '' ? escapeHtml(c.subject) : '—';
+        const msg = escapeHtml(c.message).slice(0, 280) + (String(c.message).length > 280 ? '…' : '');
+        return `<tr data-id="${c.id}">
+          <td>${c.id}</td>
+          <td>${escapeHtml(c.created_at)}</td>
+          <td>${escapeHtml(c.display_name || c.name || '')}</td>
+          <td>${c.reply_to_id != null ? escapeHtml(String(c.reply_to_id)) : '—'}</td>
+          <td>${subj}</td>
+          <td class="msg">${msg}</td>
+          <td><button type="button" class="btn-del del">削除</button></td>
+        </tr>`;
+      }).join('');
+      elList.innerHTML = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+    }
+
+    document.getElementById('btn-load').addEventListener('click', async () => {
+      setStatus('');
+      persistKey();
+      try {
+        const res = await fetch(API);
+        const raw = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(raw.error || '一覧の取得に失敗しました', 'err');
+          return;
+        }
+        const { comments } = normalizePayload(raw);
+        renderRows(comments);
+        setStatus(`読み込み完了（${comments.length} 件）`, 'ok');
+      } catch (e) {
+        setStatus('一覧の取得に失敗しました', 'err');
+      }
+    });
+
+    elList.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.btn-del');
+      if (!btn || !elList.contains(btn)) return;
+      const tr = btn.closest('tr');
+      const id = tr && Number(tr.getAttribute('data-id'));
+      if (!Number.isInteger(id) || id < 1) return;
+
+      const secret = elKey.value.trim();
+      if (!secret) {
+        setStatus('管理用キーを入力してください', 'err');
+        return;
+      }
+      if (!confirm(`id=${id} を削除しますか？`)) return;
+
+      persistKey();
+      setStatus('削除中…');
+      try {
+        const res = await fetch(API, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + secret,
+          },
+          body: JSON.stringify({ id }),
+        });
+        const raw = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(raw.error || '削除に失敗しました（' + res.status + '）', 'err');
+          return;
+        }
+        setStatus(`id=${id} を削除しました`, 'ok');
+        tr.remove();
+      } catch (err) {
+        setStatus('削除リクエストに失敗しました', 'err');
+      }
+    });
+  </script>
+</body>
+
+</html>

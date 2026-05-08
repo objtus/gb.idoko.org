@@ -45,6 +45,12 @@ function isAdminName(displayName, adminSet) {
   return adminSet.has((displayName || "").trim());
 }
 
+function parseBearerToken(request) {
+  const h = request.headers.get("Authorization") || "";
+  const m = /^Bearer\s+(\S+)$/i.exec(h.trim());
+  return m ? m[1] : null;
+}
+
 async function rateLimitWaitSec(db, ip) {
   if (!ip) return null;
   const row = await db.prepare("SELECT last_post_unix FROM gb_rate_limit WHERE ip = ?").bind(ip).first();
@@ -204,12 +210,48 @@ export async function onRequestPost({ request, env }) {
   return corsJson({ ok: true });
 }
 
+export async function onRequestDelete({ request, env }) {
+  const expected = env.ADMIN_DELETE_SECRET;
+  if (!expected || typeof expected !== "string" || !String(expected).trim()) {
+    return corsJson({ error: "Admin delete not configured" }, { status: 503 });
+  }
+  const token = parseBearerToken(request);
+  if (!token || token !== expected) {
+    return corsJson({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return corsJson({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const n = Number(body && body.id);
+  if (!Number.isInteger(n) || n < 1) {
+    return corsJson({ error: "Invalid id" }, { status: 400 });
+  }
+
+  try {
+    const result = await env.idoko_guestbook.prepare("DELETE FROM comments WHERE id = ?").bind(n).run();
+    const affected = Number(result.meta?.rows_written ?? result.meta?.changes ?? 0);
+    if (!result.success || affected < 1) {
+      return corsJson({ error: "Not found" }, { status: 404 });
+    }
+  } catch (e) {
+    console.error("delete_comment", e);
+    return corsJson({ error: "Database error" }, { status: 500 });
+  }
+
+  return corsJson({ ok: true });
+}
+
 export async function onRequestOptions() {
   return new Response(null, {
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
 }
