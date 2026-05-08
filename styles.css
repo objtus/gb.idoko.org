@@ -760,6 +760,20 @@ a.guestbook-head-permalink:focus-visible {
   font-size: 0.6875rem;
 }
 
+.footer-links {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+
+  li:first-child {
+    
+    & > a::before {
+      content: "< ";
+    }
+  }
+}
+
 /* レスポンシブ */
 @media screen and (width <= 768px) {
   #header-flex {
