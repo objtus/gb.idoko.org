@@ -2,9 +2,9 @@ name = "idoko-gb"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "."
 
-# Pages の Functions で `env` に載るように名前を宣言。本番の値はダッシュボードの Variables で上書き。ローカルは `.dev.vars` で設定。
-[vars]
-ADMIN_DELETE_SECRET = ""
+# ADMIN_DELETE_SECRET は wrangler に書かないこと（空文字が常にデプロイされ Dashboard の Secret を潰す場合がある）。
+# 本番・Preview: Cloudflare Dashboard → Pages → idoko-gb → Variables and Secrets で設定。
+# ローカル: .dev.vars に ADMIN_DELETE_SECRET=...
 
 [[d1_databases]]
 binding = "idoko_guestbook"

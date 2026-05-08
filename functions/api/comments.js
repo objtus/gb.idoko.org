@@ -51,6 +51,14 @@ function parseBearerToken(request) {
   return m ? m[1] : null;
 }
 
+/** Dashboard / .dev.vars の値を正規化（型の揺らぎに弱くする） */
+function normalizedAdminDeleteSecret(env) {
+  const v = env.ADMIN_DELETE_SECRET;
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  return String(v).trim();
+}
+
 async function rateLimitWaitSec(db, ip) {
   if (!ip) return null;
   const row = await db.prepare("SELECT last_post_unix FROM gb_rate_limit WHERE ip = ?").bind(ip).first();
@@ -211,8 +219,8 @@ export async function onRequestPost({ request, env }) {
 }
 
 export async function onRequestDelete({ request, env }) {
-  const expected = env.ADMIN_DELETE_SECRET;
-  if (!expected || typeof expected !== "string" || !String(expected).trim()) {
+  const expected = normalizedAdminDeleteSecret(env);
+  if (!expected) {
     return corsJson({ error: "Admin delete not configured" }, { status: 503 });
   }
   const token = parseBearerToken(request);
