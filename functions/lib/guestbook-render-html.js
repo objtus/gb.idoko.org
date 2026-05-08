@@ -1,4 +1,20 @@
-/** @typedef {{ id:number, display_name?:string, name?:string, is_admin?:boolean, subject?:string|null, message?:string, created_at:string, reply_to_id?:number|null, poster_id?:string }} Enriched */
+/** @typedef {{ id:number, display_name?:string, name?:string, is_admin?:boolean, subject?:string|null, message?:string, created_at:string, reply_to_id?:number|null, reply_target_ids?:number[], poster_id?:string }} Enriched */
+
+export function replyTargetIdsForRendering(c) {
+  if (Array.isArray(c.reply_target_ids) && c.reply_target_ids.length > 0) {
+    const out = [];
+    const seen = new Set();
+    for (const raw of c.reply_target_ids) {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+    return out;
+  }
+  const rt = c.reply_to_id != null ? Number(c.reply_to_id) : NaN;
+  return Number.isInteger(rt) && rt > 0 ? [rt] : [];
+}
 
 export function escHtml(str) {
   return String(str)
@@ -100,9 +116,10 @@ export function renderGuestbookArticle(c, maxId) {
     linkifyUrlsInEscaped(escHtml(bodyRaw)),
     maxId
   );
-  const replyTo = c.reply_to_id
-    ? `<a class="u-in-reply-to" href="${escAttr(permPath(c.reply_to_id))}"></a>`
-    : "";
+  const tgtIds = replyTargetIdsForRendering(c);
+  const replyTo = tgtIds
+    .map((tid) => `<a class="u-in-reply-to" href="${escAttr(permPath(tid))}"></a>`)
+    .join("");
   const perm = permPath(id);
   const idDisp = "#" + String(id).padStart(3, "0");
 

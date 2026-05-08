@@ -108,7 +108,11 @@
           '<td>' + String(c.id) + '</td>' +
           '<td>' + escapeHtml(c.created_at) + '</td>' +
           '<td>' + escapeHtml(c.display_name || c.name || '') + '</td>' +
-          '<td>' + (c.reply_to_id != null ? escapeHtml(String(c.reply_to_id)) : '—') + '</td>' +
+          '<td>' +
+          (Array.isArray(c.reply_target_ids) && c.reply_target_ids.length
+            ? escapeHtml(c.reply_target_ids.join(', '))
+            : c.reply_to_id != null ? escapeHtml(String(c.reply_to_id)) : '—') +
+          '</td>' +
           '<td>' + subj + '</td>' +
           '<td class="msg">' + msg + '</td>' +
           '<td><button type="button" class="btn-del del">削除</button></td>' +

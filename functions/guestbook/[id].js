@@ -29,7 +29,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const adminSet = parseAdminSet(env);
   const focus = enrichMaybe(chain.focus, adminSet);
-  const parent = enrichMaybe(chain.parent, adminSet);
+  const parents = (chain.parents || []).map((p) => enrichMaybe(p, adminSet));
   const replies = (chain.replies || []).map((r) => enrichCommentRow(r, adminSet));
 
   const url = new URL(request.url);
@@ -41,8 +41,11 @@ export async function onRequestGet({ request, env, params }) {
 
   let blocks = "";
   blocks += section("この投稿", renderGuestbookArticle(focus, maxId));
-  if (parent) {
-    blocks += section("返信元", renderGuestbookArticle(parent, maxId));
+  if (parents.length) {
+    blocks += section(
+      "返信元",
+      `<div class="guestbook-replies">${parents.map((p) => renderGuestbookArticle(p, maxId)).join("\n")}</div>`
+    );
   }
   if (replies.length) {
     blocks += section(

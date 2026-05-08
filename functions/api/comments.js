@@ -1,6 +1,16 @@
 import { corsJson } from "../lib/cors-json.js";
 import { enrichComments } from "../lib/guestbook-enrich.js";
-import { fetchCommentsPage, parseListQuery } from "../lib/guestbook-queries.js";
+import {
+  attachReplyTargetIds,
+  fetchCommentsPage,
+  fetchReplyTargetsBatch,
+  parseListQuery,
+} from "../lib/guestbook-queries.js";
+import {
+  MAX_REPLY_TARGETS,
+  allReplyTargetsExist,
+  mergeExplicitAndParsedReplyTargets,
+} from "../lib/guestbook-reply-targets.js";
 
 const NAME_MAX = 50;
 const SUBJECT_MAX = 120;
@@ -67,7 +77,12 @@ export async function onRequestGet({ request, env }) {
     const url = new URL(request.url);
     const { page: requestedPage, limit, posterFilter } = parseListQuery(url);
     const { results, totalCount, page } = await fetchCommentsPage(db, requestedPage, limit, posterFilter);
-    const enriched = enrichComments(results, env);
+    const targetMap = await fetchReplyTargetsBatch(
+      db,
+      results.map((r) => r.id)
+    );
+    const withTargets = attachReplyTargetIds(results, targetMap);
+    const enriched = enrichComments(withTargets, env);
 
     let maxId = 0;
     try {
@@ -135,17 +150,28 @@ export async function onRequestPost({ request, env }) {
     return corsJson({ error: "Too long" }, { status: 400 });
   }
 
-  let replyToId = null;
+  let explicitReplyOptional = null;
   if (rawReplyId != null && rawReplyId !== "") {
     const n = Number(rawReplyId);
     if (!Number.isInteger(n) || n < 1) {
       return corsJson({ error: "Invalid reply" }, { status: 400 });
     }
-    const row = await env.idoko_guestbook.prepare("SELECT id FROM comments WHERE id = ?").bind(n).first();
-    if (!row) {
+    explicitReplyOptional = n;
+  }
+
+  const mergedTargets = mergeExplicitAndParsedReplyTargets(explicitReplyOptional, msgTrim);
+  if (mergedTargets.length > MAX_REPLY_TARGETS) {
+    return corsJson(
+      { error: `Too many reply targets (max ${MAX_REPLY_TARGETS})` },
+      { status: 400 }
+    );
+  }
+
+  if (mergedTargets.length > 0) {
+    const targetsOk = await allReplyTargetsExist(env.idoko_guestbook, mergedTargets);
+    if (!targetsOk) {
       return corsJson({ error: "Invalid reply target" }, { status: 400 });
     }
-    replyToId = n;
   }
 
   const valid = await verifyTurnstile(turnstileToken, ip, env.TURNSTILE_SECRET);
@@ -163,14 +189,33 @@ export async function onRequestPost({ request, env }) {
   }
 
   const posterId = await hashPosterId(ip, env);
+  const db = env.idoko_guestbook;
+  const primaryReply = mergedTargets.length > 0 ? mergedTargets[0] : null;
 
   try {
-    await env.idoko_guestbook
+    await db
       .prepare(
         "INSERT INTO comments (name, subject, message, reply_to_id, poster_id) VALUES (?, ?, ?, ?, ?)"
       )
-      .bind(storedName, subject, msgTrim, replyToId, posterId)
+      .bind(storedName, subject, msgTrim, primaryReply, posterId)
       .run();
+    const idRow = await db.prepare("SELECT last_insert_rowid() AS id").first();
+    const newId = idRow && idRow.id != null ? Number(idRow.id) : NaN;
+
+    if (Number.isInteger(newId) && newId > 0 && mergedTargets.length > 0) {
+      try {
+        for (let pos = 0; pos < mergedTargets.length; pos++) {
+          await db
+            .prepare(
+              "INSERT INTO comment_reply_targets (comment_id, target_id, position) VALUES (?, ?, ?)"
+            )
+            .bind(newId, mergedTargets[pos], pos)
+            .run();
+        }
+      } catch (je) {
+        console.error("comment_reply_targets_insert", je);
+      }
+    }
   } catch (e) {
     if (e && String(e.message || "").includes("no such column")) {
       await env.idoko_guestbook
@@ -212,6 +257,15 @@ export async function onRequestDelete({ request, env }) {
   const n = Number(body && body.id);
   if (!Number.isInteger(n) || n < 1) {
     return corsJson({ error: "Invalid id" }, { status: 400 });
+  }
+
+  try {
+    await env.idoko_guestbook
+      .prepare("DELETE FROM comment_reply_targets WHERE comment_id = ? OR target_id = ?")
+      .bind(n, n)
+      .run();
+  } catch {
+    /* 未マイグレーション環境 */
   }
 
   try {

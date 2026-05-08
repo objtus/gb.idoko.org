@@ -30,7 +30,7 @@ export async function onRequestGet({ env, params }) {
   const adminSet = parseAdminSet(env);
   return corsJson({
     focus: enrichMaybe(chain.focus, adminSet),
-    parent: enrichMaybe(chain.parent, adminSet),
+    parents: (chain.parents || []).map((p) => enrichCommentRow(p, adminSet)),
     replies: (chain.replies || []).map((r) => enrichCommentRow(r, adminSet)),
     max_id: maxId,
   });

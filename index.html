@@ -335,6 +335,25 @@
       nav.innerHTML = `<div class="pagination-row">${prev}<span class="pagination-meta">${meta.page} / ${meta.total_pages}</span>${next}</div>`;
     }
 
+    function replyTargetIdsForList(c) {
+      if (Array.isArray(c.reply_target_ids) && c.reply_target_ids.length > 0) {
+        const seen = new Set();
+        const out = [];
+        for (const raw of c.reply_target_ids) {
+          const n = Number(raw);
+          if (!Number.isInteger(n) || n < 1 || seen.has(n)) continue;
+          seen.add(n);
+          out.push(n);
+        }
+        return out;
+      }
+      if (c.reply_to_id != null) {
+        const n = Number(c.reply_to_id);
+        if (Number.isInteger(n) && n > 0) return [n];
+      }
+      return [];
+    }
+
     function renderList(comments, maxId) {
       const list = document.getElementById('comments-list');
       const origin = window.location.origin;
@@ -361,7 +380,9 @@
           : '—';
         const bodyRaw = String(c.message || '');
         const bodyHtml = linkifyRefsAfterEscape(linkifyUrlsInEscaped(escHtml(bodyRaw)), maxId);
-        const replyTo = c.reply_to_id ? `<a class="u-in-reply-to" href="${escAttr(permUrl(c.reply_to_id))}"></a>` : '';
+        const replyTo = replyTargetIdsForList(c)
+          .map((tid) => `<a class="u-in-reply-to" href="${escAttr(permUrl(tid))}"></a>`)
+          .join('');
         const idDisp = '#' + String(id).padStart(3, '0');
         return `
 <article class="h-entry guestbook-entry" id="comment-${id}">
