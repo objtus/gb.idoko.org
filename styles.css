@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DotGothic16&display=swap");
 
 :root {
   color-scheme: light only;
@@ -9,8 +9,9 @@
   --line: #0a0a0a;
   --line-soft: #d4d4d4;
   --surface: #f7f7f7;
-  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", "Cascadia Mono", Consolas, monospace;
-  --font-ui: "IBM Plex Mono", ui-monospace, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-body: "DotGothic16", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-mono: var(--font-body);
+  --font-ui: var(--font-body);
 }
 
 * {

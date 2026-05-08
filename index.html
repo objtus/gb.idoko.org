@@ -226,7 +226,7 @@ Subject : ${escHtml(subj)}</div>
   <div class="guestbook-stats">${charCountUnicode(bodyRaw)} chars / ${utf8Bytes(bodyRaw)} bytes<br>
 ID: ${posterLink}</div>
   <div class="reply-row">
-    <button type="button" class="btn reply-btn" data-reply-id="${id}" data-subject="${escAttr(subjAttr)}">返信</button>
+    <button type="button" class="btn reply-btn" data-reply-id="${id}" data-subject="${escAttr(subjAttr)}" aria-label="返信">↩</button>
   </div>
 </article>`;
       }).join('');
