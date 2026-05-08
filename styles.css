@@ -474,7 +474,8 @@ a.guestbook-head-permalink {
 
 a.guestbook-head-permalink:hover {
   text-decoration: underline;
-  color: var(--fg-muted);
+  color: white;
+  background-color: var(--fg);
 }
 
 a.guestbook-head-permalink:focus-visible {
@@ -641,6 +642,71 @@ a.guestbook-head-permalink:focus-visible {
 .guestbook-context-empty {
   color: var(--fg-faint);
   font-size: 0.8125rem;
+}
+
+.guestbook-context-block--parents {
+  padding: 0.85rem 0.95rem;
+  background: var(--surface);
+
+  & > .guestbook-context-h2 {
+    font-size: 0.8125rem;
+    opacity: 0.5;
+    margin-bottom: 0.3rem;
+  }
+
+  .guestbook-entry > header {
+    opacity: 0.5;
+  }
+
+  .guestbook-body {
+    opacity: 1;
+    border-left-color: transparent;
+  }
+
+  .guestbook-meta-k,
+  .guestbook-meta-v {
+    display: none;
+  }
+  
+  .guestbook-meta-k:first-child,
+  .guestbook-meta-v:has(.p-author) {
+    display: inline;
+  }
+}
+
+.guestbook-context-block--focus {
+  scroll-margin-top: 4.5rem;
+
+  & > .guestbook-context-h2 {
+    font-size: 1rem;
+  }
+}
+
+.guestbook-context-block--replies {
+  margin: 4.5rem 1.4rem;
+
+  & > .guestbook-context-h2 {
+    font-size: 0.75rem;
+    margin-bottom: 0;
+  }
+
+  .guestbook-body {
+    border-left-color: transparent;
+  }
+
+  .guestbook-meta-k,
+  .guestbook-meta-v {
+    display: none;
+  }
+  
+  .guestbook-meta-k:first-child,
+  .guestbook-meta-v:has(.p-author) {
+    display: inline;
+  }
+}
+
+.guestbook-context-block--replies .guestbook-context-empty {
+  padding-left: 0;
 }
 
 .guestbook-replies .guestbook-entry {

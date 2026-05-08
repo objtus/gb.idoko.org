@@ -36,25 +36,44 @@ export async function onRequestGet({ request, env, params }) {
   const origin = url.origin;
   const num = String(id).padStart(3, "0");
 
-  const section = (title, inner) =>
-    `<section class="guestbook-context-block"><h2 class="guestbook-context-h2">${escHtml(title)}</h2>${inner}</section>`;
+  const section = (title, inner, extraClasses = "", sectionId = "") => {
+    const idAttr = sectionId ? ` id="${escHtml(sectionId)}"` : "";
+    const cls = ["guestbook-context-block", extraClasses].filter(Boolean).join(" ");
+    return `<section${idAttr} class="${cls}"><h2 class="guestbook-context-h2">${escHtml(title)}</h2>${inner}</section>`;
+  };
 
   let blocks = "";
-  blocks += section("この投稿", renderGuestbookArticle(focus, maxId));
   if (parents.length) {
     blocks += section(
       "返信元",
-      `<div class="guestbook-replies">${parents.map((p) => renderGuestbookArticle(p, maxId)).join("\n")}</div>`
+      `<div class="guestbook-replies">${parents.map((p) => renderGuestbookArticle(p, maxId)).join("\n")}</div>`,
+      "guestbook-context-block--parents"
     );
   }
+  blocks += section(
+    "この投稿",
+    renderGuestbookArticle(focus, maxId),
+    "guestbook-context-block--focus",
+    "guestbook-focus"
+  );
   if (replies.length) {
     blocks += section(
       "この投稿への返信",
-      `<div class="guestbook-replies">${replies.map((r) => renderGuestbookArticle(r, maxId)).join("\n")}</div>`
+      `<div class="guestbook-replies">${replies.map((r) => renderGuestbookArticle(r, maxId)).join("\n")}</div>`,
+      "guestbook-context-block--replies"
     );
   } else {
-    blocks += section("この投稿への返信", "<p class=\"guestbook-context-empty\">まだ返信はありません。</p>");
+    blocks += section(
+      "この投稿への返信",
+      '<p class="guestbook-context-empty">まだ返信はありません。</p>',
+      "guestbook-context-block--replies"
+    );
   }
+
+  const skipToFocus =
+    parents.length > 0
+      ? ` · <a href="#guestbook-focus">${escHtml("この投稿へ")}</a>`
+      : "";
 
   const html = `<!DOCTYPE html>
 <html lang="ja">
@@ -79,7 +98,7 @@ export async function onRequestGet({ request, env, params }) {
     </header>
     <main id="main">
       <h1 class="title">guestbook · #${escHtml(num)}</h1>
-      <p class="guestbook-context-nav"><a href="/">← 一覧へ</a></p>
+      <p class="guestbook-context-nav"><a href="/">← 一覧へ</a>${skipToFocus}</p>
       ${blocks}
     </main>
     <footer id="main-footer">
