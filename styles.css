@@ -160,6 +160,70 @@ a.addressbar:hover {
   flex: 1;
 }
 
+
+/* カテゴリヘッダー */
+#category-header {
+  .main-category,
+  .sub-category {
+    list-style: none;
+    line-height: 1;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 1rem;
+    font-size: 0.8em;
+
+    &.main-category {
+      margin-bottom: 5px;
+      text-wrap: nowrap;
+
+      a::before {
+        content: "";
+        background-image: url("https://yuinoid.neocities.org/favicon.svg");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        vertical-align: bottom;
+        margin-right: 3px;
+      }
+      
+      a:hover::before {
+        filter: invert(1);
+      }
+    }
+
+    &.sub-category {      
+      margin-bottom: 5px;
+
+      a::before {
+        content: "♥";
+        margin-right: 1px;
+      }
+    }
+
+    li {
+      background-color: #ddd;
+      padding-top: 1px;
+
+      a {
+        text-decoration: none;
+      }
+    }
+
+    span {
+      margin-left: 0.5rem;
+
+      &::before {
+        content: "-";
+        margin-right: 0.5rem;
+      }
+    }
+  }
+}
+
 h1.title {
   font-family: var(--font-mono);
   font-size: clamp(1.05rem, 2.5vw, 1.2rem);
@@ -767,7 +831,7 @@ a.guestbook-head-permalink:focus-visible {
   gap: 0.65rem;
 
   li:first-child {
-    
+
     & > a::before {
       content: "< ";
     }
