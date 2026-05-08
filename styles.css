@@ -467,6 +467,21 @@ time.time-toggle:hover {
   color: var(--fg);
 }
 
+a.guestbook-head-permalink {
+  text-decoration: none;
+  color: inherit;
+}
+
+a.guestbook-head-permalink:hover {
+  text-decoration: underline;
+  color: var(--fg-muted);
+}
+
+a.guestbook-head-permalink:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
 .guestbook-head-meta {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

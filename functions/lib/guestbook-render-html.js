@@ -104,6 +104,7 @@ export function renderGuestbookArticle(c, maxId) {
     ? `<a class="u-in-reply-to" href="${escAttr(permPath(c.reply_to_id))}"></a>`
     : "";
   const perm = permPath(id);
+  const idDisp = "#" + String(id).padStart(3, "0");
 
   return `<article class="h-entry guestbook-entry" id="comment-${id}">
   <a class="u-uid" href="${escAttr(perm)}"></a>
@@ -111,7 +112,7 @@ export function renderGuestbookArticle(c, maxId) {
   <header>
     <div class="guestbook-head">
       <div class="guestbook-head-line">
-        <div class="guestbook-head-id">#${String(id).padStart(3, "0")}</div>
+        <a class="guestbook-head-id guestbook-head-permalink" href="${escAttr(perm)}" aria-label="${escAttr(`${idDisp} の個別ページ`)}">${escHtml(idDisp)}</a>
         <div class="guestbook-stats">
           <span class="guestbook-stats-meta">${charCountUnicode(bodyRaw)} chars / ${utf8Bytes(bodyRaw)} bytes</span>
           <span class="guestbook-stats-id">ID: ${posterLink}</span>
