@@ -153,11 +153,44 @@ a.addressbar:hover {
 
 /* メイン */
 #main {
-  width: min(92vw, 72ch);
+  width: 70%;
+  max-width: 600px;
   margin: 0 auto;
-  margin-top: clamp(2.5rem, 6vw, 3.25rem);
-  padding-bottom: clamp(3rem, 8vw, 4.5rem);
+  margin-top: 4rem;
   flex: 1;
+}
+
+@media screen and (width <= 768px) {
+  #main {
+    width: 80%;
+  }
+}
+
+@media screen and (width <= 576px) {
+  #wrapper {
+    border: 5px solid #000;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  #main {
+    width: 90%;
+    margin-top: 45px;
+    margin-left: 5%;
+    margin-right: 0;
+  }
+}
+
+@media screen and (width <= 375px) {
+  #wrapper {
+    border: none;
+  }
+  
+  #main,
+  #main-footer {
+    width: 90%;
+  }
 }
 
 
