@@ -2,7 +2,7 @@
 
 import { mergeStoredAndLineReplyTargets } from "./guestbook-reply-targets.js";
 
-export const PAGE_LIMIT_DEFAULT = 25;
+export const PAGE_LIMIT_DEFAULT = 20;
 export const PAGE_LIMIT_MAX = 100;
 
 export function parseListQuery(url) {
